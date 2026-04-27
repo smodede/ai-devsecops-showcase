@@ -100,8 +100,9 @@ stages:
               export ADO_PIPELINE_IDS="${{ parameters.pipelineIds }}"
               export MAX_BUILD_RUNS="${{ parameters.maxBuildRuns }}"
               export MIN_CLUSTER_SIZE="${{ parameters.minClusterSize }}"
-              PYTHONPATH=$(Build.SourcesDirectory) python -m agent.orchestrator \
-                ${{ if eq(parameters.dryRun, true) }}--dry-run${{ end }} 2>&1
+              DRY_RUN_FLAG=""
+              if [ "${{ parameters.dryRun }}" = "True" ]; then DRY_RUN_FLAG="--dry-run"; fi
+              PYTHONPATH=$(Build.SourcesDirectory) python -m agent.orchestrator $DRY_RUN_FLAG 2>&1
             displayName: Run AI Build Intelligence analysis
             env:
               AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
