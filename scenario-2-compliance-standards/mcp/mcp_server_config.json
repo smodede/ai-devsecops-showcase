@@ -1,0 +1,95 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/spec/main/schema/mcp-server-config-schema.json",
+  "name": "ai-pr-compliance-mcp",
+  "version": "1.0.0",
+  "description": "MCP server exposing Confluence standards retrieval and PR compliance review tools.",
+  "transport": {
+    "type": "http",
+    "baseUrl": "http://localhost:9000/mcp/scenario-2"
+  },
+  "tools": [
+    {
+      "name": "fetch_confluence_standards",
+      "description": "Pull engineering standards and technical documentation from Confluence spaces.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "space_keys": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Confluence space keys to fetch standards from (e.g. ['ENG', 'DEVOPS'])."
+          },
+          "extra_page_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Additional Confluence page IDs to always include."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_pr_files",
+      "description": "Retrieve the list of changed files in an Azure DevOps pull request.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pr_id": {
+            "type": "integer",
+            "description": "Pull request ID."
+          },
+          "repo_id": {
+            "type": "string",
+            "description": "Repository GUID or name."
+          }
+        },
+        "required": ["pr_id", "repo_id"]
+      }
+    },
+    {
+      "name": "check_compliance",
+      "description": "Run GPT-powered compliance check on PR files against Confluence standards.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "object",
+            "description": "Map of file paths to their text content.",
+            "additionalProperties": { "type": "string" }
+          },
+          "standards": {
+            "type": "array",
+            "description": "Array of StandardsDocument objects as returned by fetch_confluence_standards."
+          }
+        },
+        "required": ["files", "standards"]
+      }
+    },
+    {
+      "name": "post_pr_review",
+      "description": "Post compliance findings as a comment thread on the PR and update PR status (blocks on FAIL).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pr_id": {
+            "type": "integer",
+            "description": "Pull request ID."
+          },
+          "repo_id": {
+            "type": "string",
+            "description": "Repository GUID or name."
+          },
+          "report": {
+            "type": "object",
+            "description": "ComplianceReport object as returned by check_compliance."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true, return comment Markdown without posting."
+          }
+        },
+        "required": ["pr_id", "repo_id", "report"]
+      }
+    }
+  ]
+}

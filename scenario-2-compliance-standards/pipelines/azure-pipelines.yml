@@ -1,0 +1,111 @@
+# =============================================================================
+# Scenario 2 — AI PR Compliance
+# Azure Pipelines YAML (runs against the GitHub repo)
+# =============================================================================
+#
+# Triggers:
+#   - Pull request created or updated (via ADO Service Hooks → webhook)
+#   - Direct pipeline trigger via API (passing pr_id parameter)
+#
+# Required Variable Group: "ai-devsecops-secrets"
+#   - AZURE_OPENAI_ENDPOINT
+#   - AZURE_OPENAI_API_KEY
+#   - AZURE_OPENAI_DEPLOYMENT
+#   - AZURE_OPENAI_API_VERSION
+#   - ADO_ORGANIZATION_URL
+#   - ADO_PROJECT
+#   - ADO_PAT
+#   - ADO_REPOSITORY_ID
+#   - CONFLUENCE_URL
+#   - CONFLUENCE_USERNAME
+#   - CONFLUENCE_API_TOKEN
+#   - CONFLUENCE_SPACE_KEYS  (optional)
+# =============================================================================
+
+trigger: none  # Triggered via API call from ADO Service Hook webhook
+
+parameters:
+  - name: prId
+    displayName: Pull Request ID to review
+    type: number
+    default: 0
+  - name: repoId
+    displayName: Repository ID (GUID or name)
+    type: string
+    default: ""
+  - name: dryRun
+    displayName: Dry run (skip posting to PR)
+    type: boolean
+    default: false
+
+variables:
+  - group: ai-devsecops-secrets
+  - name: pythonVersion
+    value: "3.11"
+  - name: SCENARIO_DIR
+    value: $(Build.SourcesDirectory)/scenario-2-compliance-standards
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: PRCompliance
+    displayName: AI PR Compliance Review
+    condition: ne('${{ parameters.prId }}', '0')
+    jobs:
+      - job: ReviewAndPost
+        displayName: Fetch Standards → Check Compliance → Post PR Feedback
+        timeoutInMinutes: 20
+        steps:
+          # ------------------------------------------------------------------
+          - task: UsePythonVersion@0
+            displayName: Set up Python $(pythonVersion)
+            inputs:
+              versionSpec: $(pythonVersion)
+              addToPath: true
+
+          # ------------------------------------------------------------------
+          - script: |
+              cd $(SCENARIO_DIR)
+              pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: Install dependencies
+
+          # ------------------------------------------------------------------
+          - script: |
+              cd $(Build.SourcesDirectory)
+              python -m pytest scenario-2-compliance-standards/tests/ -v --tb=short || true
+            displayName: Run unit tests
+
+          # ------------------------------------------------------------------
+          - script: |
+              cd $(SCENARIO_DIR)
+              PYTHONPATH=$(Build.SourcesDirectory) python -m agent.orchestrator \
+                --pr-id ${{ parameters.prId }} \
+                --repo-id "${{ parameters.repoId }}" \
+                ${{ parameters.dryRun == true && '--dry-run' || '' }} 2>&1
+              EXIT_CODE=$?
+              if [ $EXIT_CODE -ne 0 ]; then
+                echo "##vso[task.logissue type=error]PR compliance check FAILED."
+                exit $EXIT_CODE
+              fi
+            displayName: Run AI PR Compliance check
+            env:
+              AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
+              AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
+              AZURE_OPENAI_DEPLOYMENT: $(AZURE_OPENAI_DEPLOYMENT)
+              AZURE_OPENAI_API_VERSION: $(AZURE_OPENAI_API_VERSION)
+              ADO_ORGANIZATION_URL: $(ADO_ORGANIZATION_URL)
+              ADO_PROJECT: $(ADO_PROJECT)
+              ADO_PAT: $(ADO_PAT)
+              ADO_REPOSITORY_ID: $(ADO_REPOSITORY_ID)
+              CONFLUENCE_URL: $(CONFLUENCE_URL)
+              CONFLUENCE_USERNAME: $(CONFLUENCE_USERNAME)
+              CONFLUENCE_API_TOKEN: $(CONFLUENCE_API_TOKEN)
+              LOG_LEVEL: INFO
+
+          # ------------------------------------------------------------------
+          - script: |
+              echo "Compliance verdict: $(COMPLIANCE_VERDICT)"
+            displayName: Report compliance verdict
+            condition: always()

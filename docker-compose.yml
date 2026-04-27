@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Scenario 1 — AI Build Intelligence
+  # ---------------------------------------------------------------------------
+  scenario-1:
+    build:
+      context: .
+      dockerfile: scenario-1-build-intelligence/Dockerfile
+    container_name: ai-build-intelligence
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONPATH=/app
+    volumes:
+      - ./scenario-1-build-intelligence:/app/scenario-1-build-intelligence
+      - ./shared:/app/shared
+    working_dir: /app/scenario-1-build-intelligence
+    command: >
+      sh -c "PYTHONPATH=/app python -m agent.orchestrator"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Scenario 2 — AI PR Compliance
+  # ---------------------------------------------------------------------------
+  scenario-2:
+    build:
+      context: .
+      dockerfile: scenario-2-compliance-standards/Dockerfile
+    container_name: ai-pr-compliance
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONPATH=/app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./scenario-2-compliance-standards:/app/scenario-2-compliance-standards
+      - ./shared:/app/shared
+    working_dir: /app/scenario-2-compliance-standards
+    command: >
+      sh -c "PYTHONPATH=/app python -m agent.orchestrator --serve"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # MCP Server — shared tool host (optional, for MCP-aware runners)
+  # ---------------------------------------------------------------------------
+  mcp-server:
+    image: python:3.11-slim
+    container_name: mcp-tool-server
+    env_file:
+      - .env
+    working_dir: /app
+    volumes:
+      - ./shared:/app/shared
+    command: >
+      sh -c "pip install -q fastapi uvicorn httpx &&
+             uvicorn shared.mcp_server:app --host 0.0.0.0 --port 9000"
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
