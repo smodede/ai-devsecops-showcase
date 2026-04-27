@@ -1,5 +1,5 @@
 # =============================================================================
-# Demo App Pipeline — AI DevSecOps Showcase
+# Demo App Pipeline - AI DevSecOps Showcase
 # =============================================================================
 #
 # Purpose:
@@ -10,11 +10,11 @@
 #   wiki page.
 #
 # Failure scenarios seeded:
-#   1. Unit tests  — pytest discovers import errors after a dependency bump
-#   2. Integration — database connectivity fails (PostgreSQL not available)
-#   3. Lint        — code style violations block the pipeline
-#   4. Docker      — base image tag no longer exists in registry
-#   5. Secrets     — missing environment variable causes startup crash
+#   1. Unit tests  - pytest discovers import errors after a dependency bump
+#   2. Integration - database connectivity fails (PostgreSQL not available)
+#   3. Lint        - code style violations block the pipeline
+#   4. Docker      - base image tag no longer exists in registry
+#   5. Secrets     - missing environment variable causes startup crash
 #
 # Trigger: manual only (Queue via ADO UI or API to seed failure data)
 # =============================================================================
@@ -35,9 +35,7 @@ parameters:
       - secrets
 
 variables:
-  APP_NAME: "orders-service"
-  BUILD_ID: $(Build.BuildId)
-  BRANCH: $(Build.SourceBranchName)
+  app_name: "orders-service"
 
 pool:
   vmImage: ubuntu-latest
@@ -45,62 +43,52 @@ pool:
 stages:
 
   # ---------------------------------------------------------------------------
-  # Stage 1 — Build & Unit Tests
+  # Stage 1 - Build & Unit Tests
   # ---------------------------------------------------------------------------
   - stage: Build
-    displayName: "Build & Unit Tests"
+    displayName: "Build and Unit Tests"
+    condition: >
+      or(
+        eq('${{ parameters.failureScenario }}', 'all'),
+        eq('${{ parameters.failureScenario }}', 'unit-tests')
+      )
     jobs:
       - job: UnitTests
-        displayName: "Install dependencies & run unit tests"
+        displayName: "Install dependencies and run unit tests"
         timeoutInMinutes: 10
         steps:
 
           - script: |
-              echo "##[section]Setting up Python environment for $(APP_NAME)"
+              echo "##[section]Setting up Python environment for orders-service"
               python3 -m pip install --upgrade pip
-              echo "##[section]Installing pinned requirements..."
-              # Simulate a dependency conflict introduced by a recent version bump
-              pip install "requests==2.28.0" "urllib3==2.0.0" 2>&1
-              EXIT_CODE=$?
-              if [ $EXIT_CODE -ne 0 ]; then
-                echo "##[error]Dependency resolution failed: urllib3 v2.x is incompatible with requests==2.28.0."
-                echo "##[error]Error: Cannot install requests==2.28.0 and urllib3>=2.0.0 because these package versions have conflicting dependencies."
-                echo "##[error]The conflict is caused by: requests 2.28.0 depends on urllib3<2 and >=1.21.1"
-                exit 1
-              fi
+              echo "##[section]Installing pinned requirements"
+              echo "##[error]Dependency resolution failed: urllib3 v2.x is incompatible with requests==2.28.0."
+              echo "##[error]Error: Cannot install requests==2.28.0 and urllib3>=2.0.0 because these package versions have conflicting dependencies."
+              echo "##[error]The conflict is caused by: requests 2.28.0 depends on urllib3<2 and >=1.21.1"
+              exit 1
             displayName: "Install Python dependencies"
-            condition: |
-              or(
-                eq('${{ parameters.failureScenario }}', 'all'),
-                eq('${{ parameters.failureScenario }}', 'unit-tests')
-              )
 
           - script: |
-              echo "##[section]Running unit test suite..."
-              python3 -c "
-import sys
-# Simulate import error caused by incompatible package version
-print('Collecting tests...')
-print('ERROR: ImportError while importing test module orders_service/tests/test_payment.py')
-print('ImportError: cannot import name \"JSONDecodeError\" from \"requests.exceptions\"')
-print('(check your installed packages: requests==2.28.0 conflicts with urllib3==2.0.0)')
-print('')
-print('FAILED — 0 tests collected, 1 error')
-sys.exit(1)
-"
-            displayName: "Run pytest — orders-service"
-            condition: |
-              or(
-                eq('${{ parameters.failureScenario }}', 'all'),
-                eq('${{ parameters.failureScenario }}', 'unit-tests')
-              )
+              echo "##[section]Running unit test suite"
+              echo "Collecting tests..."
+              echo "ERROR: ImportError while importing test module orders_service/tests/test_payment.py"
+              echo "ImportError: cannot import name JSONDecodeError from requests.exceptions"
+              echo "check your installed packages: requests==2.28.0 conflicts with urllib3==2.0.0"
+              echo "FAILED - 0 tests collected, 1 error"
+              exit 1
+            displayName: "Run pytest orders-service"
 
   # ---------------------------------------------------------------------------
-  # Stage 2 — Integration Tests
+  # Stage 2 - Integration Tests
   # ---------------------------------------------------------------------------
   - stage: Integration
     displayName: "Integration Tests"
-    dependsOn: []   # Run independently so failures accumulate across stages
+    dependsOn: []
+    condition: >
+      or(
+        eq('${{ parameters.failureScenario }}', 'all'),
+        eq('${{ parameters.failureScenario }}', 'integration')
+      )
     jobs:
       - job: IntegrationTests
         displayName: "Run integration tests against PostgreSQL"
@@ -108,90 +96,68 @@ sys.exit(1)
         steps:
 
           - script: |
-              echo "##[section]Waiting for PostgreSQL to be ready..."
-              # Simulate database not being available (no service container configured)
+              echo "##[section]Waiting for PostgreSQL to be ready"
               for i in 1 2 3; do
                 echo "Attempt $i: connecting to postgres://orders-db:5432/ordersdb ..."
                 sleep 1
               done
               echo "##[error]Connection refused: could not connect to server: Connection refused"
-              echo "##[error]  Is the server running on host \"orders-db\" (172.17.0.5) and accepting"
-              echo "##[error]  TCP/IP connections on port 5432?"
-              echo "##[error]psycopg2.OperationalError: connection to server at \"orders-db\" (172.17.0.5), port 5432 failed: Connection refused"
+              echo "##[error]Is the server running on host orders-db (172.17.0.5) and accepting TCP/IP connections on port 5432?"
+              echo "##[error]psycopg2.OperationalError: connection to server at orders-db port 5432 failed: Connection refused"
               exit 1
-            displayName: "Wait for PostgreSQL & run DB migrations"
-            condition: |
-              or(
-                eq('${{ parameters.failureScenario }}', 'all'),
-                eq('${{ parameters.failureScenario }}', 'integration')
-              )
+            displayName: "Wait for PostgreSQL and run DB migrations"
 
   # ---------------------------------------------------------------------------
-  # Stage 3 — Code Quality
+  # Stage 3 - Code Quality
   # ---------------------------------------------------------------------------
   - stage: CodeQuality
-    displayName: "Code Quality & Lint"
+    displayName: "Code Quality and Lint"
     dependsOn: []
+    condition: >
+      or(
+        eq('${{ parameters.failureScenario }}', 'all'),
+        eq('${{ parameters.failureScenario }}', 'lint')
+      )
     jobs:
       - job: Lint
-        displayName: "Flake8 lint & Black formatting check"
+        displayName: "Flake8 lint and Black formatting check"
         timeoutInMinutes: 5
         steps:
 
-          - script: |
-              pip install flake8 black 2>&1 | tail -1
+          - script: pip install flake8 black 2>&1 | tail -1
             displayName: "Install linting tools"
 
           - script: |
-              echo "##[section]Running flake8 on orders_service/..."
-              # Simulate lint violations
-              python3 -c "
-violations = [
-  'orders_service/handlers/checkout.py:45:1: E302 expected 2 blank lines, found 1',
-  'orders_service/handlers/checkout.py:78:80: E501 line too long (112 > 79 characters)',
-  'orders_service/models/order.py:12:1: F401 \"uuid\" imported but unused',
-  'orders_service/models/order.py:33:5: E711 comparison to None (use \"is\" or \"is not\")',
-  'orders_service/services/payment.py:91:1: E302 expected 2 blank lines, found 1',
-  'orders_service/services/payment.py:104:13: W503 line break before binary operator',
-]
-for v in violations:
-    print(v)
-print(f'')
-print(f'flake8: {len(violations)} violation(s) found.')
-import sys; sys.exit(1)
-"
+              echo "##[section]Running flake8 on orders_service"
+              echo "orders_service/handlers/checkout.py:45:1: E302 expected 2 blank lines, found 1"
+              echo "orders_service/handlers/checkout.py:78:80: E501 line too long (112 > 79 characters)"
+              echo "orders_service/models/order.py:12:1: F401 uuid imported but unused"
+              echo "orders_service/models/order.py:33:5: E711 comparison to None (use is or is not)"
+              echo "orders_service/services/payment.py:91:1: E302 expected 2 blank lines, found 1"
+              echo "orders_service/services/payment.py:104:13: W503 line break before binary operator"
+              echo "##[error]flake8: 6 violation(s) found. Fix all E/F/W errors before merging."
+              exit 1
             displayName: "Run flake8"
-            condition: |
-              or(
-                eq('${{ parameters.failureScenario }}', 'all'),
-                eq('${{ parameters.failureScenario }}', 'lint')
-              )
 
           - script: |
-              echo "##[section]Checking Black formatting..."
-              python3 -c "
-files = [
-  'orders_service/handlers/checkout.py',
-  'orders_service/services/payment.py',
-]
-print('would reformat ' + chr(10).join(files))
-print('Oh no! 2 files would be reformatted.')
-print('Run Black with --check to see differences.')
-import sys; sys.exit(1)
-"
-            displayName: "Run Black --check"
-            condition: |
-              or(
-                eq('${{ parameters.failureScenario }}', 'all'),
-                eq('${{ parameters.failureScenario }}', 'lint')
-              )
+              echo "##[section]Checking Black formatting"
+              echo "would reformat orders_service/handlers/checkout.py"
+              echo "would reformat orders_service/services/payment.py"
+              echo "##[error]Oh no! 2 files would be reformatted. Run: black orders_service/ to fix."
+              exit 1
+            displayName: "Run Black formatting check"
 
   # ---------------------------------------------------------------------------
-  # Stage 4 — Docker Build
+  # Stage 4 - Docker Build
   # ---------------------------------------------------------------------------
   - stage: Docker
-    displayName: "Docker Build & Push"
+    displayName: "Docker Build and Push"
     dependsOn: []
+    condition: >
+      or(
+        eq('${{ parameters.failureScenario }}', 'all'),
+        eq('${{ parameters.failureScenario }}', 'docker')
+      )
     jobs:
       - job: DockerBuild
         displayName: "Build and push container image"
@@ -199,57 +165,41 @@ import sys; sys.exit(1)
         steps:
 
           - script: |
-              echo "##[section]Building Docker image: $(APP_NAME):$(BUILD_ID)"
-              # Simulate Docker build failure due to invalid base image tag
-              python3 -c "
-import sys
-print('Sending build context to Docker daemon  4.21MB')
-print('Step 1/12 : FROM python:3.11.2-slim-bullseye')
-print('3.11.2-slim-bullseye: Pulling from library/python')
-print('manifest unknown: manifest unknown')
-print('##[error]Error response from daemon: manifest for python:3.11.2-slim-bullseye not found: manifest unknown: manifest unknown')
-print('##[error]Error: failed to solve: failed to read dockerfile: failed to pull image \"python:3.11.2-slim-bullseye\": error getting credentials - err: exec: \"docker-credential-desktop.exe\": executable file not found in \$PATH, out: \`\`')
-sys.exit(1)
-"
-            displayName: "docker build $(APP_NAME)"
-            condition: |
-              or(
-                eq('${{ parameters.failureScenario }}', 'all'),
-                eq('${{ parameters.failureScenario }}', 'docker')
-              )
+              echo "##[section]Building Docker image: orders-service:$(Build.BuildId)"
+              echo "Sending build context to Docker daemon  4.21MB"
+              echo "Step 1/12 : FROM python:3.11.2-slim-bullseye"
+              echo "3.11.2-slim-bullseye: Pulling from library/python"
+              echo "manifest unknown: manifest unknown"
+              echo "##[error]Error response from daemon: manifest for python:3.11.2-slim-bullseye not found: manifest unknown"
+              echo "##[error]The base image python:3.11.2-slim-bullseye does not exist. Update the FROM tag to a valid release (e.g. python:3.11-slim)."
+              exit 1
+            displayName: "docker build orders-service"
 
   # ---------------------------------------------------------------------------
-  # Stage 5 — Deploy (Smoke Test)
+  # Stage 5 - Deploy (Smoke Test)
   # ---------------------------------------------------------------------------
   - stage: Deploy
     displayName: "Deploy to Staging"
     dependsOn: []
+    condition: >
+      or(
+        eq('${{ parameters.failureScenario }}', 'all'),
+        eq('${{ parameters.failureScenario }}', 'secrets')
+      )
     jobs:
       - job: DeployStaging
-        displayName: "Deploy $(APP_NAME) to staging environment"
+        displayName: "Deploy orders-service to staging environment"
         timeoutInMinutes: 10
         steps:
 
           - script: |
-              echo "##[section]Deploying $(APP_NAME) to staging..."
+              echo "##[section]Deploying orders-service to staging"
               echo "Checking required environment variables..."
-              python3 -c "
-import sys, os
-required = ['DATABASE_URL', 'JWT_SECRET_KEY', 'STRIPE_API_KEY', 'REDIS_URL']
-missing = [v for v in required if not os.environ.get(v)]
-if missing:
-    for v in missing:
-        print(f'##[error]KeyError: Required environment variable \"{v}\" is not set.')
-    print('')
-    print(f'##[error]Application startup failed: {len(missing)} required environment variable(s) missing.')
-    print('##[error]Set the missing variables in the pipeline variable group or Key Vault link.')
-    print('Hint: Add DATABASE_URL, JWT_SECRET_KEY, STRIPE_API_KEY, REDIS_URL to the variable group.')
-    sys.exit(1)
-print('All environment variables present. Starting application...')
-"
-            displayName: "Validate env vars & start app"
-            condition: |
-              or(
-                eq('${{ parameters.failureScenario }}', 'all'),
-                eq('${{ parameters.failureScenario }}', 'secrets')
-              )
+              echo "##[error]KeyError: Required environment variable DATABASE_URL is not set."
+              echo "##[error]KeyError: Required environment variable JWT_SECRET_KEY is not set."
+              echo "##[error]KeyError: Required environment variable STRIPE_API_KEY is not set."
+              echo "##[error]KeyError: Required environment variable REDIS_URL is not set."
+              echo "##[error]Application startup failed: 4 required environment variable(s) missing."
+              echo "##[error]Add DATABASE_URL, JWT_SECRET_KEY, STRIPE_API_KEY, REDIS_URL to the pipeline variable group."
+              exit 1
+            displayName: "Validate env vars and start app"
