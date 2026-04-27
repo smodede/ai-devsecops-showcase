@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  mcp-azure-devops:
+    image: node:20-alpine
+    working_dir: /app
+    command: npx -y @tiberriver256/mcp-server-azure-devops
+    environment:
+      AZURE_DEVOPS_ORG_URL: ${AZURE_DEVOPS_ORG_URL}
+      AZURE_DEVOPS_PROJECT: ${AZURE_DEVOPS_PROJECT}
+      AZURE_DEVOPS_PAT: ${AZURE_DEVOPS_PAT}
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+
+  scenario-1:
+    build:
+      context: ./scenario-1-build-intelligence
+    environment:
+      AZURE_DEVOPS_ORG_URL: ${AZURE_DEVOPS_ORG_URL}
+      AZURE_DEVOPS_PROJECT: ${AZURE_DEVOPS_PROJECT}
+      AZURE_DEVOPS_PAT: ${AZURE_DEVOPS_PAT}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION}
+      BUILD_LOOKBACK_DAYS: ${BUILD_LOOKBACK_DAYS:-30}
+      BUILD_FAILURE_THRESHOLD: ${BUILD_FAILURE_THRESHOLD:-3}
+      WIKI_ROOT_PAGE: ${WIKI_ROOT_PAGE:-AI DevSecOps Training}
+    depends_on:
+      - mcp-azure-devops
+    profiles: ["scenario-1"]
+
+  scenario-2:
+    build:
+      context: ./scenario-2-compliance-standards
+    environment:
+      AZURE_DEVOPS_ORG_URL: ${AZURE_DEVOPS_ORG_URL}
+      AZURE_DEVOPS_PROJECT: ${AZURE_DEVOPS_PROJECT}
+      AZURE_DEVOPS_PAT: ${AZURE_DEVOPS_PAT}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION}
+      CONFLUENCE_BASE_URL: ${CONFLUENCE_BASE_URL}
+      CONFLUENCE_USER_EMAIL: ${CONFLUENCE_USER_EMAIL}
+      CONFLUENCE_API_TOKEN: ${CONFLUENCE_API_TOKEN}
+      CONFLUENCE_SPACE_KEY: ${CONFLUENCE_SPACE_KEY:-DEVSECOPS}
+      PR_ID: ${PR_ID}
+      REPOSITORY_ID: ${REPOSITORY_ID}
+      COMPLIANCE_FAIL_ON_CRITICAL: ${COMPLIANCE_FAIL_ON_CRITICAL:-true}
+    depends_on:
+      - mcp-azure-devops
+    profiles: ["scenario-2"]
