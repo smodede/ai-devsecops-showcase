@@ -378,6 +378,7 @@ class ADOClient:
     ) -> dict[str, Any]:
         """
         Create or update a Wiki page with the given Markdown content.
+        Automatically creates any missing ancestor pages required by ADO.
 
         Args:
             wiki_id: The Wiki identifier.
@@ -396,9 +397,44 @@ class ADOClient:
         if version:
             extra_headers["If-Match"] = version
 
-        result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
+        try:
+            result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                # ADO returns 404 when ancestor pages don't exist — create them first
+                self._ensure_wiki_ancestors(wiki_id, path)
+                result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
+            else:
+                raise
+
         logger.info("Upserted Wiki page: wiki=%s path=%s", wiki_id, path)
         return result
+
+    def _ensure_wiki_ancestors(self, wiki_id: str, path: str) -> None:
+        """Create all missing ancestor pages for the given wiki page path."""
+        from pathlib import PurePosixPath
+        parts = PurePosixPath(path).parts  # e.g. ('/', 'Build-Intelligence', 'Failure-Report')
+        # Build ancestor paths (skip root '/' and the leaf page itself)
+        ancestors = []
+        current = ""
+        for part in parts[1:-1]:  # skip leading '/' and the final page name
+            current = f"{current}/{part}"
+            ancestors.append(current)
+        for ancestor_path in ancestors:
+            try:
+                self.get_wiki_page(wiki_id, ancestor_path)
+            except requests.HTTPError as exc:
+                if exc.response is not None and exc.response.status_code == 404:
+                    title = ancestor_path.rsplit("/", 1)[-1].replace("-", " ").title()
+                    ancestor_params = {"api-version": self.API_VERSION, "path": ancestor_path}
+                    self._put(
+                        f"{self.organization_url}/{self.project}/_apis/wiki/wikis/{wiki_id}/pages",
+                        {"content": f"# {title}\n"},
+                        params=ancestor_params,
+                    )
+                    logger.info("Created ancestor wiki page: %s", ancestor_path)
+                else:
+                    raise
 
     def get_wiki_page_version(self, wiki_id: str, path: str) -> str | None:
         """Return the ETag version of an existing wiki page, or None if it doesn't exist."""
