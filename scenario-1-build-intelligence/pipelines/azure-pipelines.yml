@@ -101,7 +101,7 @@ stages:
               export MAX_BUILD_RUNS="${{ parameters.maxBuildRuns }}"
               export MIN_CLUSTER_SIZE="${{ parameters.minClusterSize }}"
               PYTHONPATH=$(Build.SourcesDirectory) python -m agent.orchestrator \
-                ${{ parameters.dryRun == true && '--dry-run' || '' }} 2>&1
+                ${{ if eq(parameters.dryRun, true) }}--dry-run${{ end }} 2>&1
             displayName: Run AI Build Intelligence analysis
             env:
               AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
