@@ -71,6 +71,13 @@ class ConfluenceFetcher:
         self._session.mount("https://", HTTPAdapter(max_retries=retry))
         self._session.mount("http://", HTTPAdapter(max_retries=retry))
 
+        # Confluence Cloud requires /wiki prefix; Data Center does not
+        self._api_root = (
+            f"{self.base_url}/wiki/rest/api"
+            if "atlassian.net" in self.base_url
+            else f"{self.base_url}/rest/api"
+        )
+
         logger.info("ConfluenceFetcher initialised (url=%s)", self.base_url)
 
     # ------------------------------------------------------------------
@@ -78,7 +85,7 @@ class ConfluenceFetcher:
     # ------------------------------------------------------------------
 
     def _api(self, path: str, params: dict | None = None) -> dict:
-        url = f"{self.base_url}/rest/api/{path}"
+        url = f"{self._api_root}/{path}"
         resp = self._session.get(url, params=params)
         resp.raise_for_status()
         return resp.json()
