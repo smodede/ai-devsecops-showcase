@@ -1,0 +1,18 @@
+# Azure OpenAI
+openai>=1.30.0
+
+# HTTP client (Confluence + ADO REST)
+requests>=2.31.0
+urllib3>=2.0.0
+
+# Webhook server (serve mode)
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+
+# Testing
+pytest>=8.0.0
+pytest-mock>=3.12.0
+pytest-asyncio>=0.23.0
+
+# Utilities
+python-dotenv>=1.0.0

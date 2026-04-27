@@ -1,0 +1,83 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/spec/main/schema/mcp-server-config-schema.json",
+  "name": "ai-build-intelligence-mcp",
+  "version": "1.0.0",
+  "description": "MCP server exposing Azure DevOps build data and Wiki publishing tools for the AI Build Intelligence agent.",
+  "transport": {
+    "type": "http",
+    "baseUrl": "http://localhost:9000/mcp/scenario-1"
+  },
+  "tools": [
+    {
+      "name": "get_failed_builds",
+      "description": "Retrieve recent failed Azure DevOps pipeline runs, enriched with per-task error details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pipeline_ids": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Optional list of pipeline definition IDs to filter by."
+          },
+          "top": {
+            "type": "integer",
+            "default": 100,
+            "description": "Maximum number of failed builds to return."
+          }
+        }
+      }
+    },
+    {
+      "name": "mine_failure_patterns",
+      "description": "Group build failures into heuristic patterns based on task names and error messages.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "failures": {
+            "type": "array",
+            "description": "Array of BuildFailure objects as returned by get_failed_builds."
+          },
+          "min_cluster_size": {
+            "type": "integer",
+            "default": 2,
+            "description": "Minimum number of occurrences to form a cluster."
+          }
+        },
+        "required": ["failures"]
+      }
+    },
+    {
+      "name": "analyse_root_causes",
+      "description": "Use Azure OpenAI GPT to analyse failure patterns and produce root cause findings with remediation steps.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "patterns": {
+            "type": "array",
+            "description": "Array of FailurePattern objects as returned by mine_failure_patterns."
+          }
+        },
+        "required": ["patterns"]
+      }
+    },
+    {
+      "name": "publish_wiki_report",
+      "description": "Render findings as Markdown and upsert to the configured Azure DevOps Wiki page.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "findings": {
+            "type": "array",
+            "description": "Array of RootCauseFinding objects as returned by analyse_root_causes."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true, return the Markdown without publishing."
+          }
+        },
+        "required": ["findings"]
+      }
+    }
+  ]
+}

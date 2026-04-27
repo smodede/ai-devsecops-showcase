@@ -1,0 +1,125 @@
+# =============================================================================
+# Scenario 1 — AI Build Intelligence
+# Azure Pipelines YAML (runs against the GitHub repo)
+# =============================================================================
+#
+# Triggers:
+#   - Scheduled nightly run (analyses the last 24 hours of failures)
+#   - Manual run via pipeline UI / API
+#
+# Required Variable Group: "ai-devsecops-secrets"
+#   - AZURE_OPENAI_ENDPOINT
+#   - AZURE_OPENAI_API_KEY
+#   - AZURE_OPENAI_DEPLOYMENT
+#   - AZURE_OPENAI_API_VERSION
+#   - ADO_ORGANIZATION_URL
+#   - ADO_PROJECT
+#   - ADO_PAT
+#   - ADO_WIKI_ID
+#   - ADO_WIKI_PATH
+#   - ADO_PIPELINE_IDS  (optional)
+# =============================================================================
+
+trigger: none  # Disable CI trigger — this is a scheduled/manual pipeline
+
+schedules:
+  - cron: "0 6 * * *"        # 06:00 UTC daily
+    displayName: Nightly Build Intelligence Analysis
+    branches:
+      include:
+        - main
+    always: true              # Run even when there are no new commits
+
+parameters:
+  - name: pipelineIds
+    displayName: Pipeline IDs to analyse (comma-separated, leave empty for all)
+    type: string
+    default: ""
+  - name: maxBuildRuns
+    displayName: Maximum build runs to analyse
+    type: number
+    default: 100
+  - name: minClusterSize
+    displayName: Minimum failures to form a pattern cluster
+    type: number
+    default: 2
+  - name: dryRun
+    displayName: Dry run (skip Wiki publish)
+    type: boolean
+    default: false
+
+variables:
+  - group: ai-devsecops-secrets
+  - name: pythonVersion
+    value: "3.11"
+  - name: SCENARIO_DIR
+    value: $(Build.SourcesDirectory)/scenario-1-build-intelligence
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: BuildIntelligence
+    displayName: AI Build Intelligence Analysis
+    jobs:
+      - job: AnalyseAndPublish
+        displayName: Mine Failures → GPT Analysis → Publish Wiki
+        timeoutInMinutes: 30
+        steps:
+          # ------------------------------------------------------------------
+          - task: UsePythonVersion@0
+            displayName: Set up Python $(pythonVersion)
+            inputs:
+              versionSpec: $(pythonVersion)
+              addToPath: true
+
+          # ------------------------------------------------------------------
+          - script: |
+              cd $(SCENARIO_DIR)
+              pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: Install dependencies
+
+          # ------------------------------------------------------------------
+          - script: |
+              cd $(Build.SourcesDirectory)
+              python -m pytest scenario-1-build-intelligence/tests/ -v --tb=short 2>&1 | tee test-results.xml || true
+            displayName: Run unit tests
+
+          - task: PublishTestResults@2
+            displayName: Publish test results
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: "$(Build.SourcesDirectory)/test-results.xml"
+              failTaskOnFailedTests: false
+
+          # ------------------------------------------------------------------
+          - script: |
+              cd $(SCENARIO_DIR)
+              export ADO_PIPELINE_IDS="${{ parameters.pipelineIds }}"
+              export MAX_BUILD_RUNS="${{ parameters.maxBuildRuns }}"
+              export MIN_CLUSTER_SIZE="${{ parameters.minClusterSize }}"
+              PYTHONPATH=$(Build.SourcesDirectory) python -m agent.orchestrator \
+                ${{ parameters.dryRun == true && '--dry-run' || '' }} 2>&1
+            displayName: Run AI Build Intelligence analysis
+            env:
+              AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
+              AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
+              AZURE_OPENAI_DEPLOYMENT: $(AZURE_OPENAI_DEPLOYMENT)
+              AZURE_OPENAI_API_VERSION: $(AZURE_OPENAI_API_VERSION)
+              ADO_ORGANIZATION_URL: $(ADO_ORGANIZATION_URL)
+              ADO_PROJECT: $(ADO_PROJECT)
+              ADO_PAT: $(ADO_PAT)
+              ADO_WIKI_ID: $(ADO_WIKI_ID)
+              ADO_WIKI_PATH: $(ADO_WIKI_PATH)
+              LOG_LEVEL: INFO
+
+          # ------------------------------------------------------------------
+          - task: PublishPipelineArtifact@1
+            displayName: Publish analysis logs
+            condition: always()
+            inputs:
+              targetPath: $(Build.SourcesDirectory)
+              artifact: build-intelligence-logs
+              publishLocation: pipeline
