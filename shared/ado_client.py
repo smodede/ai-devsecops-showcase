@@ -123,9 +123,9 @@ class ADOClient:
         resp.raise_for_status()
         return resp.json()
 
-    def _put(self, url: str, body: dict, extra_headers: dict | None = None) -> Any:
+    def _put(self, url: str, body: dict, extra_headers: dict | None = None, params: dict | None = None) -> Any:
         headers = {**self._headers, **(extra_headers or {})}
-        resp = self._session.put(url, json=body, headers=headers)
+        resp = self._session.put(url, json=body, headers=headers, params=params)
         resp.raise_for_status()
         return resp.json()
 
@@ -396,7 +396,7 @@ class ADOClient:
         if version:
             extra_headers["If-Match"] = version
 
-        result = self._put(url, {"content": content}, extra_headers=extra_headers)
+        result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
         logger.info("Upserted Wiki page: wiki=%s path=%s", wiki_id, path)
         return result
 
