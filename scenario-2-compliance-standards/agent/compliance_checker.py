@@ -18,7 +18,7 @@ from .confluence_fetcher import StandardsDocument
 
 logger = logging.getLogger(__name__)
 
-_MAX_STANDARDS_CHARS = 12_000  # Truncate standards context to stay within token limits
+_MAX_STANDARDS_CHARS = 40_000  # GPT-4o supports 128k tokens; generous limit for full standards
 _MAX_FILE_CHARS = 6_000        # Truncate individual file content
 
 _SYSTEM_PROMPT = """\
