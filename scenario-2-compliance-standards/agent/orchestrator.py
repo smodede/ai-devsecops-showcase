@@ -19,6 +19,7 @@ import argparse
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 _repo_root = Path(__file__).resolve().parents[3]
@@ -28,11 +29,48 @@ if str(_repo_root) not in sys.path:
 from shared.ado_client import ADOClient
 from shared.utils import configure_logging
 
-from .compliance_checker import ComplianceChecker
+from .compliance_checker import ComplianceChecker, ComplianceReport
 from .confluence_fetcher import ConfluenceFetcher
-from .pr_reviewer import PRReviewer
+from .pr_reviewer import PRReviewer, _render_comment
 
 logger = logging.getLogger(__name__)
+
+
+def _publish_to_wiki(ado: ADOClient, report: ComplianceReport, pr_id: int) -> str | None:
+    """
+    Publish the compliance report to the ADO Wiki as a new timestamped page.
+    Returns the wiki page path, or None if publishing is disabled/fails.
+    """
+    wiki_id = os.environ.get("ADO_WIKI_ID", "")
+    if not wiki_id:
+        logger.warning("ADO_WIKI_ID not set — skipping wiki publish")
+        return None
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+    verdict_tag = report.verdict  # PASS or FAIL
+    page_path = f"/PR-Compliance/PR-{pr_id}-{timestamp}-{verdict_tag}"
+
+    from .pr_reviewer import _render_comment
+    markdown = _render_comment(report, pr_id)
+
+    # Add a header line with PR link
+    header = (
+        f"# AI PR Compliance — PR #{pr_id}\n\n"
+        f"_Run: {timestamp} &nbsp;|&nbsp; "
+        f"Verdict: **{verdict_tag}** &nbsp;|&nbsp; "
+        f"Findings: {len(report.findings)} "
+        f"({sum(1 for f in report.findings if f.severity == 'CRITICAL')} critical, "
+        f"{sum(1 for f in report.findings if f.severity == 'HIGH')} high)_\n\n---\n\n"
+    )
+    full_content = header + markdown
+
+    try:
+        ado.upsert_wiki_page(wiki_id=wiki_id, path=page_path, content=full_content)
+        logger.info("Published compliance report to wiki: %s", page_path)
+        return page_path
+    except Exception as exc:
+        logger.error("Failed to publish wiki page: %s", exc)
+        return None
 
 
 def run_for_pr(
@@ -110,7 +148,6 @@ def run_for_pr(
 
     # 4. Post results (or dry-run)
     if dry_run:
-        from .pr_reviewer import _render_comment
         result["markdown"] = _render_comment(report, pr_id)
         logger.info("Dry run — PR comment/status skipped. Markdown captured.")
     else:
@@ -118,6 +155,11 @@ def run_for_pr(
         review_result = reviewer.review(pr_id=pr_id, report=report, repo_id=repo_id)
         result["comment_thread_id"] = review_result.comment_thread_id
         result["status_state"] = review_result.status_state
+
+    # 5. Always publish to wiki (new page per run)
+    wiki_path = _publish_to_wiki(ado, report, pr_id)
+    if wiki_path:
+        result["wiki_path"] = wiki_path
 
     logger.info("=== AI PR Compliance — review complete: %s ===", result)
     return result
