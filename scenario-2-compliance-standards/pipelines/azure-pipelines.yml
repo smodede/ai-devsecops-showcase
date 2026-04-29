@@ -80,10 +80,11 @@ stages:
           # ------------------------------------------------------------------
           - script: |
               cd $(SCENARIO_DIR)
+              if [ "${{ parameters.dryRun }}" = "True" ]; then DRY_RUN_FLAG="--dry-run"; else DRY_RUN_FLAG=""; fi
               PYTHONPATH=$(Build.SourcesDirectory) python -m agent.orchestrator \
                 --pr-id ${{ parameters.prId }} \
                 --repo-id "${{ parameters.repoId }}" \
-                ${{ parameters.dryRun == true && '--dry-run' || '' }} 2>&1
+                $DRY_RUN_FLAG 2>&1
               EXIT_CODE=$?
               if [ $EXIT_CODE -ne 0 ]; then
                 echo "##vso[task.logissue type=error]PR compliance check FAILED."
