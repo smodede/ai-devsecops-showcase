@@ -92,15 +92,43 @@ class ConfluenceFetcher:
 
     @staticmethod
     def _strip_html(html: str) -> str:
-        """Strip HTML tags and decode common entities."""
-        text = re.sub(r"<[^>]+>", " ", html)
-        text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        text = text.replace("&nbsp;", " ").replace("&quot;", '"')
-        text = text.replace("&rarr;", "->").replace("&larr;", "<-")
-        text = text.replace("&mdash;", "—").replace("&ndash;", "–")
-        text = text.replace("&raquo;", ">>").replace("&laquo;", "<<")
-        text = re.sub(r"\s+", " ", text).strip()
-        return text
+        """Convert HTML to structured plain text, preserving headings, lists, and tables."""
+        # Decode common HTML entities first
+        html = html.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+        html = html.replace("&nbsp;", " ").replace("&quot;", '"').replace("&#39;", "'")
+        html = html.replace("&rarr;", "->").replace("&larr;", "<-")
+        html = html.replace("&mdash;", "—").replace("&ndash;", "–")
+        html = html.replace("&raquo;", ">>").replace("&laquo;", "<<")
+
+        # Headings -> Markdown headings
+        html = re.sub(r"<h1[^>]*>", "\n# ", html, flags=re.IGNORECASE)
+        html = re.sub(r"<h2[^>]*>", "\n## ", html, flags=re.IGNORECASE)
+        html = re.sub(r"<h3[^>]*>", "\n### ", html, flags=re.IGNORECASE)
+        html = re.sub(r"<h4[^>]*>", "\n#### ", html, flags=re.IGNORECASE)
+        html = re.sub(r"</h[1-6]>", "\n", html, flags=re.IGNORECASE)
+
+        # Table rows, cells — convert to readable rows
+        html = re.sub(r"<tr[^>]*>", "\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"<t[dh][^>]*>", " | ", html, flags=re.IGNORECASE)
+        html = re.sub(r"</t[dh]>", "", html, flags=re.IGNORECASE)
+        html = re.sub(r"</tr>", "", html, flags=re.IGNORECASE)
+
+        # List items -> bullet points
+        html = re.sub(r"<li[^>]*>", "\n- ", html, flags=re.IGNORECASE)
+        html = re.sub(r"</li>", "", html, flags=re.IGNORECASE)
+
+        # Paragraphs and line breaks -> newlines
+        html = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"<p[^>]*>", "\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"</p>", "\n", html, flags=re.IGNORECASE)
+
+        # Strip remaining tags
+        text = re.sub(r"<[^>]+>", "", html)
+
+        # Collapse excessive blank lines but keep intentional newlines
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
+        return text.strip()
 
     # ------------------------------------------------------------------
     # Public API
@@ -127,7 +155,7 @@ class ConfluenceFetcher:
             params={
                 "spaceKey": space_key,
                 "type": "page",
-                "expand": "body.storage,version,metadata.labels",
+                "expand": "body.view,version,metadata.labels",
                 "limit": max_pages,
             },
         )
@@ -145,7 +173,7 @@ class ConfluenceFetcher:
         logger.info("Fetching Confluence page id=%s", page_id)
         page = self._api(
             f"content/{page_id}",
-            params={"expand": "body.storage,version,metadata.labels"},
+            params={"expand": "body.view,version,metadata.labels"},
         )
         space_key = page.get("space", {}).get("key", "")
         return self._page_to_document(page, space_key)
@@ -196,7 +224,7 @@ class ConfluenceFetcher:
         return documents
 
     def _page_to_document(self, page: dict, space_key: str) -> StandardsDocument:
-        body_html = page.get("body", {}).get("storage", {}).get("value", "")
+        body_html = page.get("body", {}).get("view", {}).get("value", "")
         plain_text = self._strip_html(body_html)
         labels = [
             label["name"]
