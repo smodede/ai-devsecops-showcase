@@ -177,8 +177,15 @@ Review the files above against the engineering standards and return the complian
         raw_response = self._client.chat(messages, temperature=0.1, max_tokens=3000)
         logger.debug("GPT compliance response: %s", truncate(raw_response, 400))
 
+        # Strip markdown code fences GPT sometimes wraps the JSON in
+        cleaned = raw_response.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1]  # remove opening ```json line
+            cleaned = cleaned.rsplit("```", 1)[0]  # remove closing ```
+            cleaned = cleaned.strip()
+
         try:
-            parsed = json.loads(raw_response)
+            parsed = json.loads(cleaned)
         except json.JSONDecodeError:
             logger.warning("GPT did not return valid JSON; treating as FAIL.")
             return ComplianceReport(

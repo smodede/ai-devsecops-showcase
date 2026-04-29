@@ -64,6 +64,13 @@ def run_for_pr(
 
     # 2. Fetch PR files from ADO
     ado = ADOClient()
+
+    # Resolve the source branch so file content is fetched from the PR branch, not main
+    pr_details = ado.get_pull_request(repo_id=repo_id, pr_id=pr_id)
+    source_ref = pr_details.get("sourceRefName", "refs/heads/main")
+    source_branch = source_ref.removeprefix("refs/heads/")
+    logger.info("PR %d source branch: %s", pr_id, source_branch)
+
     changed_files = ado.get_pr_files(repo_id=repo_id, pr_id=pr_id)
 
     # Collect YAML / code files (skip binaries)
@@ -80,7 +87,7 @@ def run_for_pr(
             logger.debug("Skipping non-text file: %s", path)
             continue
         try:
-            content = ado.get_file_content(repo_id=repo_id, path=path)
+            content = ado.get_file_content(repo_id=repo_id, path=path, version=source_branch)
             files_to_review[path] = content
         except Exception:
             logger.warning("Could not fetch content for file '%s'", path)
