@@ -34,6 +34,8 @@ Your task:
 - Do NOT raise findings for general code quality, style, logging verbosity, or best practices
   that are not explicitly listed in the standards.
 - Each finding's "rule" field MUST reference a specific standard from the Confluence document by name.
+- Each finding's "severity" field MUST use the severity level from the Compliance Summary table at the
+  bottom of the standards document — do NOT assign your own severity judgement.
 - Raise findings for the PR promotion path (branching strategy) based on the PR context provided.
 - Call out what is correctly implemented relative to the standards (compliant_items).
 - Assign a final verdict: PASS or FAIL.
