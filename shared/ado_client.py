@@ -250,6 +250,35 @@ class ADOClient:
         changes = self._get(url2, params={"api-version": self.API_VERSION})
         return changes.get("changeEntries", [])
 
+    def list_branch_files(self, repo_id: str, version: str, scope_path: str = "/") -> list[str]:
+        """
+        Recursively list all file paths in a branch.
+
+        Args:
+            repo_id: Repository GUID.
+            version: Branch name (e.g. 'main', 'feature/foo').
+            scope_path: Root path to list under (default '/').
+
+        Returns:
+            List of file paths (e.g. ['/services/foo/bar.py', ...]).
+        """
+        url = self._url(f"git/repositories/{repo_id}/items")
+        params = {
+            "api-version": self.API_VERSION,
+            "versionDescriptor.version": version,
+            "scopePath": scope_path,
+            "recursionLevel": "full",
+            "$format": "json",
+        }
+        resp = self._session.get(url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return [
+            item["path"]
+            for item in data.get("value", [])
+            if not item.get("isFolder", False)
+        ]
+
     def get_file_content(self, repo_id: str, path: str, version: str = "main") -> str:
         """Fetch the raw content of a file from the repository."""
         url = self._url(f"git/repositories/{repo_id}/items")

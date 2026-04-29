@@ -109,20 +109,30 @@ def run_for_pr(
     source_branch = source_ref.removeprefix("refs/heads/")
     logger.info("PR %d source branch: %s", pr_id, source_branch)
 
-    changed_files = ado.get_pr_files(repo_id=repo_id, pr_id=pr_id)
-
-    # Collect YAML / code files (skip binaries)
+    # Collect YAML / code files from the FULL source branch (not just PR diff)
     TEXT_EXTENSIONS = {".yml", ".yaml", ".py", ".json", ".tf", ".sh", ".md", ".txt", ".cfg", ".ini", ".toml"}
+    # Paths to skip — docs, test fixtures, root README, etc.
+    SKIP_PREFIXES = ("/docs/", "/scenario-1-", "/scenario-2-", "/.git")
     files_to_review: dict[str, str] = {}
 
-    for entry in changed_files:
-        item = entry.get("item", {})
-        path: str = item.get("path", "")
+    try:
+        all_paths = ado.list_branch_files(repo_id=repo_id, version=source_branch)
+        logger.info("Branch '%s' has %d total files", source_branch, len(all_paths))
+    except Exception as exc:
+        logger.warning("Could not list branch files, falling back to PR diff: %s", exc)
+        all_paths = [
+            entry.get("item", {}).get("path", "")
+            for entry in ado.get_pr_files(repo_id=repo_id, pr_id=pr_id)
+        ]
+
+    for path in all_paths:
         if not path:
             continue
         ext = Path(path).suffix.lower()
         if ext not in TEXT_EXTENSIONS:
-            logger.debug("Skipping non-text file: %s", path)
+            continue
+        if any(path.startswith(p) for p in SKIP_PREFIXES):
+            logger.debug("Skipping non-service file: %s", path)
             continue
         try:
             content = ado.get_file_content(repo_id=repo_id, path=path, version=source_branch)
@@ -134,7 +144,7 @@ def run_for_pr(
         logger.info("No reviewable files found in PR %d.", pr_id)
         return {"pr_id": pr_id, "verdict": "PASS", "findings_count": 0, "note": "No reviewable files"}
 
-    logger.info("Reviewing %d files in PR %d", len(files_to_review), pr_id)
+    logger.info("Reviewing %d files from branch '%s' for PR %d", len(files_to_review), source_branch, pr_id)
 
     # 3. Run compliance check — pass PR branch context so GPT can evaluate promotion path
     target_ref = pr_details.get("targetRefName", "refs/heads/main")
