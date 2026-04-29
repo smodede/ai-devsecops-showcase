@@ -25,16 +25,20 @@ _SYSTEM_PROMPT = """\
 You are a senior DevSecOps compliance reviewer.
 
 You will receive:
-1. Engineering standards and policies extracted from Confluence.
-2. The content of one or more files from a pull request (pipeline YAML, source code, config).
+1. Engineering standards extracted from Confluence — these are the ONLY rules you must evaluate against.
+2. The content of files from a pull request (pipeline YAML, source code, config).
+3. Pull request context (source branch, target branch, promotion path).
 
 Your task:
-- Review each file against the provided standards.
-- For each violation or concern, produce a finding.
-- Also explicitly call out what the file gets RIGHT (compliant sections).
+- Evaluate ONLY against the rules explicitly defined in the provided Confluence standards.
+- Do NOT raise findings for general code quality, style, logging verbosity, or best practices
+  that are not explicitly listed in the standards.
+- Each finding's "rule" field MUST reference a specific standard from the Confluence document by name.
+- Raise findings for the PR promotion path (branching strategy) based on the PR context provided.
+- Call out what is correctly implemented relative to the standards (compliant_items).
 - Assign a final verdict: PASS or FAIL.
   - FAIL if any CRITICAL or HIGH severity violations are found.
-  - PASS otherwise (MEDIUM/LOW are advisory only).
+  - PASS otherwise (MEDIUM/LOW/INFO are advisory only).
 
 Respond with valid JSON matching this exact schema:
 {
@@ -44,14 +48,14 @@ Respond with valid JSON matching this exact schema:
     {
       "file": "path/to/file.yml",
       "severity": "CRITICAL | HIGH | MEDIUM | LOW | INFO",
-      "rule": "Short rule name from the standards",
-      "description": "What is wrong or noteworthy",
+      "rule": "Exact rule name as stated in the Confluence standards",
+      "description": "What is wrong and which standard it violates",
       "line_hint": "optional: line number or snippet context",
-      "recommendation": "Concrete fix"
+      "recommendation": "Concrete fix aligned with the standard"
     }
   ],
   "compliant_items": [
-    "Description of what is correctly implemented"
+    "Description of what correctly satisfies a specific standard"
   ]
 }
 Do not include any text outside the JSON object.
@@ -194,7 +198,7 @@ Review the files above against the engineering standards and return the complian
             len(standards),
         )
 
-        raw_response = self._client.chat(messages, temperature=0.1, max_tokens=3000)
+        raw_response = self._client.chat(messages, temperature=0.0, max_tokens=3000)
         logger.debug("GPT compliance response: %s", truncate(raw_response, 400))
 
         # Strip markdown code fences GPT sometimes wraps the JSON in
