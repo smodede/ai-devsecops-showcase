@@ -391,12 +391,17 @@ class ADOClient:
     # ------------------------------------------------------------------
 
     def get_wiki_page(self, wiki_id: str, path: str) -> dict[str, Any]:
-        """Fetch an existing Wiki page."""
+        """Fetch an existing Wiki page, injecting the ETag from the response header into the returned dict."""
         url = (
             f"{self.organization_url}/{self.project}/_apis/wiki/wikis/{wiki_id}/pages"
         )
         params = {"api-version": self.API_VERSION, "path": path, "includeContent": "true"}
-        return self._get(url, params=params)
+        resp = self._session.get(url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        # ADO returns the ETag in the response header, not the JSON body
+        data["eTag"] = resp.headers.get("ETag", "").strip('"')
+        return data
 
     def upsert_wiki_page(
         self,
@@ -430,8 +435,18 @@ class ADOClient:
             result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else None
-            if status in (404, 500):
-                # ADO returns 404 (or 500) when ancestor pages don't exist — create them first
+            if status == 500 and not extra_headers.get("If-Match"):
+                # ADO returns 500 when updating an existing page without a valid ETag.
+                # Try fetching the current ETag and retry with If-Match.
+                current_etag = self.get_wiki_page_version(wiki_id, path)
+                if current_etag:
+                    extra_headers["If-Match"] = current_etag
+                    result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
+                else:
+                    # Page doesn't exist yet — ensure ancestor pages and create it
+                    self._ensure_wiki_ancestors(wiki_id, path)
+                    result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
+            elif status == 404:
                 self._ensure_wiki_ancestors(wiki_id, path)
                 result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
             else:
