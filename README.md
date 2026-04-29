@@ -2,6 +2,7 @@
 
 An end-to-end showcase of AI-powered DevSecOps automation using Python 3.11, Azure OpenAI, and Azure DevOps. Two production-ready scenarios demonstrate how AI agents can autonomously improve build reliability and enforce compliance standards.
 
+
 ---
 
 ## 🚀 Scenarios
