@@ -1,11 +1,12 @@
 # =============================================================================
 # Scenario 2 — AI PR Compliance
-# Azure Pipelines YAML (runs against the GitHub repo)
+# Azure Pipelines YAML
 # =============================================================================
 #
 # Triggers:
-#   - Pull request created or updated (via ADO Service Hooks → webhook)
-#   - Direct pipeline trigger via API (passing pr_id parameter)
+#   - Automatically when a PR is raised/updated (via Build Validation Policy on main)
+#     ADO injects System.PullRequest.PullRequestId automatically in this mode.
+#   - Manually via ADO UI or API (pass prId parameter explicitly)
 #
 # Required Variable Group: "ai-devsecops-secrets"
 #   - AZURE_OPENAI_ENDPOINT
@@ -22,15 +23,15 @@
 #   - CONFLUENCE_SPACE_KEYS  (optional)
 # =============================================================================
 
-trigger: none  # Triggered via API call from ADO Service Hook webhook
+trigger: none  # Triggered via Build Validation Policy or manual run
 
 parameters:
   - name: prId
-    displayName: Pull Request ID to review
+    displayName: Pull Request ID to review (leave 0 to auto-detect from build context)
     type: number
     default: 0
   - name: repoId
-    displayName: Repository ID (GUID or name)
+    displayName: Repository ID (GUID or name — leave blank to use variable group value)
     type: string
     default: ""
   - name: dryRun
@@ -44,6 +45,9 @@ variables:
     value: "3.11"
   - name: SCENARIO_DIR
     value: $(Build.SourcesDirectory)/scenario-2-compliance-standards
+  # Resolved PR ID: explicit parameter wins; falls back to ADO build validation injection
+  - name: RESOLVED_PR_ID
+    value: ${{ parameters.prId }}
 
 pool:
   vmImage: ubuntu-latest
@@ -51,7 +55,6 @@ pool:
 stages:
   - stage: PRCompliance
     displayName: AI PR Compliance Review
-    condition: ne('${{ parameters.prId }}', '0')
     jobs:
       - job: ReviewAndPost
         displayName: Fetch Standards → Check Compliance → Post PR Feedback
@@ -80,9 +83,23 @@ stages:
           # ------------------------------------------------------------------
           - script: |
               cd $(SCENARIO_DIR)
+              # Resolve PR ID: explicit parameter > ADO build validation injection
+              if [ "${{ parameters.prId }}" != "0" ]; then
+                PR_ID="${{ parameters.prId }}"
+              else
+                PR_ID="$(System.PullRequest.PullRequestId)"
+              fi
+              echo "Reviewing PR ID: $PR_ID"
+
+              if [ -z "$PR_ID" ] || [ "$PR_ID" = "$(System.PullRequest.PullRequestId)" ] && [ -z "$(System.PullRequest.PullRequestId)" ]; then
+                echo "##vso[task.logissue type=warning]No PR ID available. Skipping compliance check."
+                exit 0
+              fi
+
               if [ "${{ parameters.dryRun }}" = "True" ]; then DRY_RUN_FLAG="--dry-run"; else DRY_RUN_FLAG=""; fi
+
               PYTHONPATH=$(Build.SourcesDirectory) python -m agent.orchestrator \
-                --pr-id ${{ parameters.prId }} \
+                --pr-id "$PR_ID" \
                 --repo-id "${{ parameters.repoId }}" \
                 $DRY_RUN_FLAG 2>&1
               EXIT_CODE=$?
