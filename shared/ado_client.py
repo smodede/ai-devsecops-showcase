@@ -86,7 +86,7 @@ class ADOClient:
         retry = Retry(
             total=3,
             backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
+            status_forcelist=[429, 502, 503, 504],  # 500 excluded: ADO uses it for logic errors (missing parent page etc.)
         )
         self._session.mount("https://", HTTPAdapter(max_retries=retry))
         self._session.headers.update(self._headers)
@@ -429,8 +429,9 @@ class ADOClient:
         try:
             result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
         except requests.HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 404:
-                # ADO returns 404 when ancestor pages don't exist — create them first
+            status = exc.response.status_code if exc.response is not None else None
+            if status in (404, 500):
+                # ADO returns 404 (or 500) when ancestor pages don't exist — create them first
                 self._ensure_wiki_ancestors(wiki_id, path)
                 result = self._put(url, {"content": content}, extra_headers=extra_headers, params=params)
             else:
