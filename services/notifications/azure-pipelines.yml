@@ -1,0 +1,66 @@
+# Notification Service CI/CD Pipeline
+# Violations:
+#   - No SonarQube stage
+#   - No unit test step
+#   - Secrets hardcoded in variables
+#   - No artifact publishing
+#   - Direct deploy to production, no approval gate
+#   - No staging environment
+
+trigger:
+  branches:
+    include:
+      - feature/*
+      - main        # Violation: merging directly from feature to main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  SERVICE_NAME: notification-service
+  REGISTRY: myregistry.azurecr.io
+  # Violation: secrets hardcoded in YAML
+  SMTP_PASSWORD: "SuperSecret$SMTP99"
+  SENDGRID_KEY: "SG.hardcoded_key_in_pipeline"
+  TWILIO_TOKEN: "twilio_live_token_in_pipeline"
+  DB_URL: "postgresql://admin:P@ssw0rd@prod-db.innvtechcloud.com:5432/notifications"
+
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: BuildApp
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.11"
+
+          - script: pip install -r services/notifications/requirements.txt || true
+            displayName: Install dependencies
+
+          # Violation: No unit tests — completely omitted
+          # Violation: No SonarQube scan
+
+          - script: |
+              docker build -t $(REGISTRY)/$(SERVICE_NAME):$(Build.BuildId) services/notifications/
+            displayName: Build Docker image
+
+          # Violation: No PublishPipelineArtifact step
+
+  - stage: DeployProduction
+    displayName: Deploy to Production
+    dependsOn: Build
+    # Violation: No staging environment, no approval gate
+    jobs:
+      - job: Deploy
+        steps:
+          - script: |
+              docker login $(REGISTRY) -u admin -p $(SMTP_PASSWORD)
+              docker push $(REGISTRY)/$(SERVICE_NAME):$(Build.BuildId)
+            displayName: Push image
+
+          - script: |
+              kubectl set image deployment/notification-service \
+                notification-service=$(REGISTRY)/$(SERVICE_NAME):$(Build.BuildId) \
+                --namespace=production
+            displayName: Deploy directly to production (no approval)
