@@ -42,9 +42,11 @@ def _render_comment(report: ComplianceReport, pr_id: int) -> str:
         "",
     ]
 
+    _SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
     if report.findings:
         lines += ["### Findings", ""]
-        for finding in report.findings:
+        sorted_findings = sorted(report.findings, key=lambda f: _SEVERITY_ORDER.get(f.severity, 99))
+        for finding in sorted_findings:
             emoji = _SEVERITY_EMOJI.get(finding.severity, "⚪")
             lines += [
                 f"#### {emoji} `{finding.severity}` — {finding.rule}",
