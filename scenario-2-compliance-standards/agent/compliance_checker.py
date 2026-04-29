@@ -129,6 +129,7 @@ class ComplianceChecker:
         self,
         files: dict[str, str],
         standards: list[StandardsDocument],
+        pr_context: dict | None = None,
     ) -> ComplianceReport:
         """
         Check the given files against the provided standards.
@@ -147,6 +148,25 @@ class ComplianceChecker:
         standards_context = _build_standards_context(standards)
         files_context = _build_files_context(files)
 
+        pr_context_section = ""
+        if pr_context:
+            source = pr_context.get("source_branch", "unknown")
+            target = pr_context.get("target_branch", "unknown")
+            pr_id = pr_context.get("pr_id", "")
+            pr_context_section = f"""\
+## Pull Request Context
+
+- **PR ID:** {pr_id}
+- **Source branch:** `{source}`
+- **Target branch:** `{target}`
+- **Promotion path of this PR:** `{source}` -> `{target}`
+
+IMPORTANT: Evaluate whether this promotion path complies with the branching strategy defined in the standards.
+
+---
+
+"""
+
         user_prompt = f"""\
 ## Engineering Standards
 
@@ -154,7 +174,7 @@ class ComplianceChecker:
 
 ---
 
-## Pull Request Files Under Review
+{pr_context_section}## Pull Request Files Under Review
 
 {files_context}
 
