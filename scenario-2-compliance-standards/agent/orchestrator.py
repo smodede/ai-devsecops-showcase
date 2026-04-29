@@ -136,9 +136,16 @@ def run_for_pr(
 
     logger.info("Reviewing %d files in PR %d", len(files_to_review), pr_id)
 
-    # 3. Run compliance check
+    # 3. Run compliance check — pass PR branch context so GPT can evaluate promotion path
+    target_ref = pr_details.get("targetRefName", "refs/heads/main")
+    target_branch = target_ref.removeprefix("refs/heads/")
+    pr_context = {
+        "pr_id": pr_id,
+        "source_branch": source_branch,
+        "target_branch": target_branch,
+    }
     checker = ComplianceChecker()
-    report = checker.check(files=files_to_review, standards=standards)
+    report = checker.check(files=files_to_review, standards=standards, pr_context=pr_context)
 
     result: dict = {
         "pr_id": pr_id,
