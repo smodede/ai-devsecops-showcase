@@ -96,6 +96,9 @@ class ConfluenceFetcher:
         text = re.sub(r"<[^>]+>", " ", html)
         text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
         text = text.replace("&nbsp;", " ").replace("&quot;", '"')
+        text = text.replace("&rarr;", "->").replace("&larr;", "<-")
+        text = text.replace("&mdash;", "—").replace("&ndash;", "–")
+        text = text.replace("&raquo;", ">>").replace("&laquo;", "<<")
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
